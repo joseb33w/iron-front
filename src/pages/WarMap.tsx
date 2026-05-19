@@ -8,6 +8,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { WarStrip } from '../components/WarStrip';
 import { supabase, t } from '../lib/supabase';
+import { tierTuning } from '../lib/device';
+import { useSettings } from '../lib/settings';
 
 const TILE_W = 1.0;
 const TILE_GAP = 0.05;
@@ -19,6 +21,8 @@ export default function WarMap() {
   const [feed, setFeed] = useState<{ when: string; text: string; color: string }[]>([]);
   const navigate = useNavigate();
   const { player } = useAuth();
+  const tier = useSettings((s) => s.graphicsTier);
+  const tuningGfx = useMemo(() => tierTuning(tier), [tier]);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,20 +53,21 @@ export default function WarMap() {
       <div className="panel panel-rivets overflow-hidden h-[68vh] min-h-[460px] relative">
         <Canvas
           camera={{ position: [0, 8, 18], fov: 38 }}
-          shadows
-          dpr={[1, 1.6]}
+          shadows={tuningGfx.shadowMapSize > 0}
+          dpr={[1, tuningGfx.dprMax]}
+          gl={{ antialias: tuningGfx.antialias }}
         >
           <color attach="background" args={['#0a0a08']} />
           <fog attach="fog" args={['#0a0a08', 22, 60]} />
-          <Stars radius={50} depth={20} count={1200} factor={1.5} fade speed={0.4} />
+          <Stars radius={50} depth={20} count={tuningGfx.warmapStars} factor={1.5} fade speed={0.4} />
           <ambientLight intensity={0.35} />
           <directionalLight
             position={[8, 14, 6]}
             intensity={1.1}
-            castShadow
+            castShadow={tuningGfx.shadowMapSize > 0}
             color="#ffd9a0"
-            shadow-mapSize-width={1024}
-            shadow-mapSize-height={1024}
+            shadow-mapSize-width={tuningGfx.shadowMapSize}
+            shadow-mapSize-height={tuningGfx.shadowMapSize}
           />
           <directionalLight position={[-10, 6, -3]} intensity={0.3} color="#7090ff" />
           <pointLight position={[-TILE_LEN / 2, 1.5, 0]} intensity={1.8} distance={5} color="#c0392b" />

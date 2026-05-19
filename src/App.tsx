@@ -11,9 +11,9 @@ function HeaderBar() {
   if (isBattle) return null;
 
   return (
-    <header className="relative z-20 panel panel-rivets m-3 mb-0 px-6 py-3 flex items-center justify-between gap-4 flex-wrap">
-      <div className="flex items-center gap-4">
-        <Link to="/" className="flex items-center gap-3">
+    <header className="relative z-20 panel panel-rivets m-3 mb-0 px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex items-center gap-3 sm:gap-4">
+        <Link to="/" className="flex items-center gap-3" style={{ minHeight: 44 }}>
           <svg width="34" height="34" viewBox="0 0 64 64" aria-hidden>
             <rect width="64" height="64" rx="6" fill="#141411" stroke="#b08d57" strokeWidth="2" />
             <path d="M8 32l16-16 8 8 8-8 16 16-16 16-8-8-8 8z" fill="#c0392b" stroke="#7a1f17" />
@@ -47,6 +47,11 @@ function HeaderBar() {
           <span className="text-steel-300 text-xs">— No Identity —</span>
         )}
       </div>
+      <nav className="md:hidden flex items-center gap-1 w-full pt-1 -mx-1">
+        <NavTab to="/">Briefing</NavTab>
+        <NavTab to="/warmap">War Map</NavTab>
+        <NavTab to="/barracks">Barracks</NavTab>
+      </nav>
     </header>
   );
 }
@@ -56,6 +61,7 @@ function NavTab({ to, children }: { to: string; children: React.ReactNode }) {
     <NavLink
       to={to}
       end={to === '/'}
+      style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center' }}
       className={({ isActive }) =>
         `px-3 py-1.5 text-xs uppercase tracking-widest border-b-2 transition-colors ${
           isActive
@@ -72,9 +78,23 @@ function NavTab({ to, children }: { to: string; children: React.ReactNode }) {
 function WarLoader() {
   const { loadWar, subscribe } = useWarStore();
   useEffect(() => {
+    // Kick the data fetch immediately — it's what the war strip needs.
     loadWar();
-    const unsub = subscribe();
-    return unsub;
+
+    // Defer the Realtime websocket handshake until after first paint so
+    // it can't push the form's mount past the 4 s budget on 4G.
+    let unsub: (() => void) | null = null;
+    const w = window as any;
+    const startSub = () => { unsub = subscribe(); };
+    if (typeof w.requestIdleCallback === 'function') {
+      const id = w.requestIdleCallback(startSub, { timeout: 1500 });
+      return () => {
+        try { w.cancelIdleCallback?.(id); } catch {}
+        unsub?.();
+      };
+    }
+    const tid = setTimeout(startSub, 800);
+    return () => { clearTimeout(tid); unsub?.(); };
   }, [loadWar, subscribe]);
   return null;
 }

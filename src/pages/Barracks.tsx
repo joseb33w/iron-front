@@ -2,6 +2,8 @@ import { useAuth } from '../lib/auth';
 import { useWarStore } from '../lib/store';
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { useSettings } from '../lib/settings';
+import type { GraphicsTier } from '../lib/device';
 
 const MEDAL_CATALOG: { code: string; name: string; desc: string; icon: string; color: string }[] = [
   { code: 'first_blood', name: 'First Blood', desc: 'Score your first kill.', icon: '🩸', color: '#c0392b' },
@@ -34,6 +36,7 @@ export default function Barracks() {
         <p className="text-steel-200 mb-4 text-sm">You haven't enlisted yet. Sign the papers to receive a barracks slot.</p>
         <button className="btn-brass" onClick={signInAnon}>Sign Papers</button>
         <div className="mt-3"><Link to="/" className="text-brass-light text-xs underline">return to briefing</Link></div>
+        <div className="mt-6 max-w-md mx-auto text-left"><HangarSettings /></div>
       </div>
     );
   }
@@ -44,13 +47,14 @@ export default function Barracks() {
         <h2 className="stencil text-brass-light text-xl mb-2">Awaiting Assignment</h2>
         <p className="text-steel-200 text-sm">Complete enlistment on the briefing page to receive your service record.</p>
         <div className="mt-3"><Link to="/" className="text-brass-light underline">go to briefing</Link></div>
+        <div className="mt-6 max-w-md mx-auto text-left"><HangarSettings /></div>
       </div>
     );
   }
 
   return (
     <div className="mx-3 my-3 space-y-3">
-      <div className="panel panel-rivets p-6 grid md:grid-cols-[auto_1fr_auto] gap-6 items-center">
+      <div className="panel panel-rivets p-5 sm:p-6 grid md:grid-cols-[auto_1fr_auto] gap-6 items-center">
         <div className="relative w-32 h-32 rounded-md panel flex items-center justify-center"
              style={{ background: `radial-gradient(circle, ${faction?.color}33 0%, transparent 70%)`, borderColor: faction?.color }}>
           <div className="text-center">
@@ -78,7 +82,7 @@ export default function Barracks() {
         </div>
       </div>
 
-      <div className="panel panel-rivets p-6">
+      <div className="panel panel-rivets p-5 sm:p-6">
         <h3 className="stencil text-brass-light text-lg mb-3">Promotion Track</h3>
         <div className="relative">
           <div className="h-1.5 bg-steel-600 rounded-full overflow-hidden">
@@ -96,7 +100,7 @@ export default function Barracks() {
         </div>
       </div>
 
-      <div className="panel panel-rivets p-6">
+      <div className="panel panel-rivets p-5 sm:p-6">
         <h3 className="stencil text-brass-light text-lg mb-3">Medals & Citations</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {MEDAL_CATALOG.map((m) => {
@@ -121,9 +125,45 @@ export default function Barracks() {
         )}
       </div>
 
-      <div className="flex justify-between items-center">
+      <HangarSettings />
+
+      <div className="flex justify-between items-center flex-wrap gap-2">
         <Link to="/warmap" className="btn-iron !text-xs">◀ View War Map</Link>
         <Link to="/" className="btn-crimson !text-xs">Briefing & Deploy ▶</Link>
+      </div>
+    </div>
+  );
+}
+
+function HangarSettings() {
+  const tier = useSettings((s) => s.graphicsTier);
+  const setTier = useSettings((s) => s.setGraphicsTier);
+  const tiers: { code: GraphicsTier; label: string; desc: string }[] = [
+    { code: 'low',    label: 'Low',    desc: 'No shadows, no bloom, simple smoke. Best on older phones.' },
+    { code: 'medium', label: 'Medium', desc: 'Soft shadows, bloom on, simpler smoke. Default for mobile.' },
+    { code: 'high',   label: 'High',   desc: 'Full shadows, full bloom, two-octave noise smoke. Desktop default.' },
+  ];
+  return (
+    <div className="panel panel-rivets p-5 sm:p-6">
+      <h3 className="stencil text-brass-light text-lg mb-1">Hangar — Graphics</h3>
+      <p className="text-steel-200 text-xs mb-3">
+        Saved per-device. Applies the next time you redeploy to the front.
+      </p>
+      <div className="grid grid-cols-3 gap-2">
+        {tiers.map((tt) => {
+          const active = tier === tt.code;
+          return (
+            <button
+              key={tt.code}
+              onClick={() => setTier(tt.code)}
+              className={`panel p-3 text-left transition-all ${active ? 'ring-2 ring-brass' : 'opacity-90'}`}
+              style={{ minHeight: 44 }}
+            >
+              <div className="stencil text-brass-light text-sm">{tt.label}</div>
+              <div className="text-[10px] text-steel-300 leading-snug mt-1">{tt.desc}</div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

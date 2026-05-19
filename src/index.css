@@ -7,6 +7,10 @@
     height: 100%;
     margin: 0;
   }
+  html {
+    /* Prevent iOS Safari font upsizing in landscape. */
+    -webkit-text-size-adjust: 100%;
+  }
   body {
     @apply bg-steel-700 text-steel-100 font-body;
     background-image:
@@ -15,6 +19,7 @@
       linear-gradient(180deg, #141411 0%, #0c0c0a 100%);
     background-attachment: fixed;
     overflow-x: hidden;
+    overscroll-behavior-y: contain;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -37,6 +42,15 @@
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { @apply bg-brass-dark rounded-full; }
   ::-webkit-scrollbar-track { @apply bg-steel-700; }
+
+  /* Battle canvas: kill pull-to-refresh, double-tap-zoom, and scroll
+     during combat. Battle.tsx tags its root with .battle-root. */
+  .battle-root, .battle-root canvas {
+    touch-action: none;
+  }
+  .battle-root {
+    overscroll-behavior: contain;
+  }
 }
 
 @layer components {
@@ -69,9 +83,13 @@
   .panel-rivets::after  { right: 6px; }
 
   .btn {
-    @apply panel px-5 py-2.5 transition-all duration-150
-      hover:brightness-110 hover:scale-[1.02] active:scale-[0.98]
+    @apply panel transition-all duration-150
+      hover:brightness-110 active:scale-[0.98]
       uppercase tracking-widest text-sm;
+    /* >=44pt hit target everywhere — required for mobile touch. */
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.625rem 1.25rem;
   }
   .btn-crimson {
     @apply btn border-crimson/60 bg-crimson-dark/60 text-crimson-light hover:bg-crimson/40;
@@ -85,6 +103,7 @@
   .input {
     @apply panel bg-steel-700/80 px-3 py-2 text-steel-100 placeholder-steel-300
       focus:outline-none focus:ring-2 focus:ring-brass/60;
+    min-height: 44px;
   }
   .badge {
     @apply rounded-full px-3 py-1 text-xs uppercase tracking-wider border;
@@ -95,4 +114,11 @@
     50%      { opacity: 0.55; filter: drop-shadow(0 0 12px #ff5040); }
   }
   .pulse-trench { animation: pulse-trench 1.4s ease-in-out infinite; }
+
+  /* Coarse-pointer = touch device. Disable hover-only affordances so a
+     finger tap doesn't get stuck in a "hovered" state on iOS. */
+  @media (hover: none) {
+    .btn:hover { filter: none; transform: none; }
+    .input:hover { background-color: inherit; }
+  }
 }
