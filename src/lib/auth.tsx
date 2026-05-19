@@ -45,10 +45,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchPlayer]);
 
   const signInAnon = useCallback(async () => {
-    // Synthesize a fresh recruit identity. We use email/password under the hood
-    // (Supabase anonymous-auth is disabled on the shared project). To skip the
-    // inbox round-trip, the server has a SECURITY DEFINER RPC that confirms
-    // emails matching the strict `recruit-<hex>@iron-front.dev` pattern only.
     const seed = Math.random().toString(36).replace(/[^a-z0-9]/g, '').slice(0, 8).padEnd(8, '0');
     const email = `recruit-${seed}@iron-front.dev`;
     const password = `${seed}${seed.toUpperCase()}A1!`;
