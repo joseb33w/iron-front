@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { useWarStore } from '../lib/store';
-import { WarStrip } from '../components/WarStrip';
+
+const LazyWarStripBlock = lazy(() => import('../components/WarStripBlock'));
+const LazyRecentBattles = lazy(() => import('../components/RecentBattles'));
 
 export default function Landing() {
   const { player, session, signInAnon, enlist } = useAuth();
@@ -14,6 +16,7 @@ export default function Landing() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const prewarmed = useRef(false);
   const contested = sectors.filter((s) => s.contested);
 
   useEffect(() => {
@@ -24,6 +27,27 @@ export default function Landing() {
     }
   }, [player, factions]);
 
+  // Pre-warm anonymous sign-in as soon as the form mounts. By the time
+  // the user finishes typing their callsign and taps "Enlist", the
+  // session is already live and the click is one fast RPC call.
+  useEffect(() => {
+    if (prewarmed.current) return;
+    if (session) return;
+    prewarmed.current = true;
+    const w = window as any;
+    const fire = () => {
+      try { console.time('[ironfront] prewarm_signin'); } catch {}
+      signInAnon().catch(() => {}).finally(() => {
+        try { console.timeEnd('[ironfront] prewarm_signin'); } catch {}
+      });
+    };
+    if (typeof w.requestIdleCallback === 'function') {
+      w.requestIdleCallback(fire, { timeout: 1200 });
+    } else {
+      setTimeout(fire, 300);
+    }
+  }, [session, signInAnon]);
+
   const onEnlist = async () => {
     setErr(null);
     if (!callsign.trim() || !chosen) {
@@ -32,11 +56,13 @@ export default function Landing() {
     }
     setBusy(true);
     try {
+      console.time('[ironfront] enlist_total');
       if (!session) await signInAnon();
       await enlist(callsign.trim(), chosen);
     } catch (e: any) {
       setErr(e?.message ?? 'Enlistment failed');
     } finally {
+      try { console.timeEnd('[ironfront] enlist_total'); } catch {}
       setBusy(false);
     }
   };
@@ -53,30 +79,11 @@ export default function Landing() {
     <div className="relative">
       <Hero />
 
-      <section className="mx-3 mt-6">
-        <div className="flex items-end justify-between mb-2 px-2">
-          <h2 className="stencil text-brass-light text-xl">— GLOBAL FRONT LINE —</h2>
-          <div className="text-[11px] text-steel-300 tracking-wider">
-            {loaded ? `${contested.length} contested sectors` : 'Receiving telegraph…'}
-          </div>
-        </div>
-        <WarStrip />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-          <Stat label="Crimson Vanguard" value={
-            sectors.filter(s => factionOf('crimson_vanguard')?.id === s.owner_faction_id).length
-          } color="#c0392b" suffix=" sectors" />
-          <Stat label="Iron Compact" value={
-            sectors.filter(s => factionOf('iron_compact')?.id === s.owner_faction_id).length
-          } color="#bdc3c7" suffix=" sectors" />
-          <Stat label="Front Position" value={
-            sectors.find(s => s.contested)?.position_index ?? '—'
-          } color="#ff4030" suffix="/49" />
-          <Stat label="Resets" value="Sun 00:00 UTC" color="#d4af6a" suffix="" />
-        </div>
-      </section>
-
-      <section className="mx-3 mt-6 grid lg:grid-cols-2 gap-3">
-        <div className="panel panel-rivets p-6">
+      {/* Order on mobile: form first (so first-paint → tappable Enlist
+          is fast), then war strip + stats below. Desktop preserves the
+          original two-column read where the strip sits at the top. */}
+      <section className="mx-3 mt-6 grid grid-cols-1 lg:grid-cols-2 gap-3 order-1 lg:order-2">
+        <div className="panel panel-rivets p-5 sm:p-6">
           <h3 className="stencil text-brass-light text-lg mb-1">Enlistment Form 14-B</h3>
           <p className="text-steel-200 text-sm mb-5">
             Sign your name. Pick a side. <em>Faction loyalty is permanent — no defectors.</em>
@@ -101,16 +108,25 @@ export default function Landing() {
               accent="#34495e"
             />
           </div>
-          <label className="block text-[11px] text-steel-300 tracking-widest uppercase mb-1">Callsign</label>
+          <label htmlFor="callsign-input" className="block text-[11px] text-steel-300 tracking-widest uppercase mb-1">Callsign</label>
           <input
+            id="callsign-input"
+            type="text"
+            inputMode="text"
+            autoComplete="username"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="go"
             className="input w-full font-stencil tracking-widest"
             placeholder="e.g. BLACK-DOG-07"
             value={callsign}
             onChange={(e) => setCallsign(e.target.value.toUpperCase().slice(0, 24))}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !busy && !player?.loyalty_locked) onEnlist(); }}
             disabled={!!player?.loyalty_locked}
           />
           {err && <div className="mt-3 text-crimson-light text-sm">{err}</div>}
-          <div className="flex gap-3 mt-4">
+          <div className="flex flex-wrap gap-3 mt-4">
             {!player?.loyalty_locked && (
               <button className="btn-brass" disabled={busy} onClick={onEnlist}>
                 {busy ? 'Stamping papers…' : player ? 'Confirm Enlistment' : 'Enlist'}
@@ -134,7 +150,7 @@ export default function Landing() {
           )}
         </div>
 
-        <div className="panel panel-rivets p-6">
+        <div className="panel panel-rivets p-5 sm:p-6">
           <h3 className="stencil text-brass-light text-lg mb-3">Field Doctrine</h3>
           <ul className="space-y-2 text-sm text-steel-100">
             <Li><strong className="text-brass-light">One front, one war.</strong> Each match advances or cedes a sector. Lose enough, your capital falls.</Li>
@@ -146,10 +162,44 @@ export default function Landing() {
         </div>
       </section>
 
+      <section className="mx-3 mt-6 order-2 lg:order-1">
+        <div className="flex items-end justify-between mb-2 px-2">
+          <h2 className="stencil text-brass-light text-xl">— GLOBAL FRONT LINE —</h2>
+          <div className="text-[11px] text-steel-300 tracking-wider">
+            {loaded ? `${contested.length} contested sectors` : 'Receiving telegraph…'}
+          </div>
+        </div>
+        <Suspense fallback={<WarStripFallback />}>
+          <LazyWarStripBlock />
+        </Suspense>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+          <Stat label="Crimson Vanguard" value={
+            sectors.filter(s => factionOf('crimson_vanguard')?.id === s.owner_faction_id).length
+          } color="#c0392b" suffix=" sectors" />
+          <Stat label="Iron Compact" value={
+            sectors.filter(s => factionOf('iron_compact')?.id === s.owner_faction_id).length
+          } color="#bdc3c7" suffix=" sectors" />
+          <Stat label="Front Position" value={
+            sectors.find(s => s.contested)?.position_index ?? '—'
+          } color="#ff4030" suffix="/49" />
+          <Stat label="Resets" value="Sun 00:00 UTC" color="#d4af6a" suffix="" />
+        </div>
+      </section>
+
       <section className="mx-3 mt-6 mb-10">
         <h3 className="stencil text-brass-light text-lg mb-2">Recent Engagements</h3>
-        <RecentBattles />
+        <Suspense fallback={<div className="panel panel-rivets p-6 text-steel-300 text-sm italic">Loading dispatches…</div>}>
+          <LazyRecentBattles />
+        </Suspense>
       </section>
+    </div>
+  );
+}
+
+function WarStripFallback() {
+  return (
+    <div className="panel panel-rivets p-4 text-center text-steel-300 stencil text-sm" style={{ minHeight: 120 }}>
+      Receiving telegraph…
     </div>
   );
 }
@@ -157,9 +207,9 @@ export default function Landing() {
 function Hero() {
   return (
     <section className="relative mx-3 mt-3 panel panel-rivets overflow-hidden">
-      <div className="px-6 py-10 md:py-14 relative z-10">
+      <div className="px-5 sm:px-6 py-8 sm:py-10 md:py-14 relative z-10">
         <div className="text-[11px] tracking-[0.4em] text-crimson-light uppercase">— Year 1947. The war never ended. —</div>
-        <h1 className="font-stencil text-4xl md:text-6xl text-brass-light mt-2 leading-tight">
+        <h1 className="font-stencil text-3xl sm:text-4xl md:text-6xl text-brass-light mt-2 leading-tight">
           IRON&nbsp;FRONT
         </h1>
         <p className="mt-3 max-w-2xl text-steel-200 text-sm md:text-base">
@@ -203,8 +253,8 @@ function FactionPick({
       type="button"
       onClick={onClick}
       disabled={locked}
-      className={`relative panel p-4 text-left transition-all ${active ? 'ring-2 ring-brass scale-[1.01]' : 'opacity-90 hover:opacity-100'} ${locked ? 'opacity-40 cursor-not-allowed' : ''}`}
-      style={{ borderColor: active ? color : undefined, background: `linear-gradient(135deg, ${accent}33 0%, transparent 60%)` }}
+      style={{ minHeight: 72 }}
+      className={`relative panel p-4 text-left transition-all ${active ? 'ring-2 ring-brass scale-[1.01]' : 'opacity-90'} ${locked ? 'opacity-40 cursor-not-allowed' : ''}`}
     >
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 rounded" style={{ background: `linear-gradient(135deg, ${color}, ${accent})`, border: `1px solid ${color}` }} />
@@ -233,53 +283,5 @@ function Li({ children }: { children: React.ReactNode }) {
       <span className="text-brass">▸</span>
       <span>{children}</span>
     </li>
-  );
-}
-
-import { supabase, t } from '../lib/supabase';
-
-function RecentBattles() {
-  const [rows, setRows] = useState<any[]>([]);
-  const { sectors, factions } = useWarStore();
-  useEffect(() => {
-    supabase.from(t('battles'))
-      .select('id,started_at,ended_at,sector_id,winning_faction_id,resolved,participants')
-      .order('started_at', { ascending: false })
-      .limit(6)
-      .then(({ data }) => setRows(data ?? []));
-  }, []);
-  if (!rows.length) {
-    return (
-      <div className="panel panel-rivets p-6 text-steel-300 text-sm italic">
-        No engagements logged yet. Be the first to mark the dirt.
-      </div>
-    );
-  }
-  return (
-    <div className="panel panel-rivets divide-y divide-steel-500/30">
-      {rows.map((b) => {
-        const s = sectors.find((x) => x.id === b.sector_id);
-        const f = factions.find((x) => x.id === b.winning_faction_id);
-        return (
-          <div key={b.id} className="px-4 py-2.5 flex items-center justify-between text-sm">
-            <div className="flex items-center gap-3">
-              <span className="stencil text-brass-light w-10 text-right">#{s?.position_index ?? '?'}</span>
-              <span className="text-steel-100">{s?.name ?? 'unknown'}</span>
-              <span className="text-[11px] text-steel-300">· {s?.biome ?? ''}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              {b.resolved ? (
-                <span className="badge" style={{ color: f?.color, borderColor: f?.color }}>
-                  {f?.name ?? 'Unresolved'}
-                </span>
-              ) : (
-                <span className="badge text-crimson-light border-crimson pulse-trench">In Progress</span>
-              )}
-              <span className="text-[11px] text-steel-300">{new Date(b.started_at).toLocaleString()}</span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
   );
 }
