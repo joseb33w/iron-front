@@ -1,4 +1,4 @@
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState, useCallback, Suspense } from 'react';
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
@@ -13,6 +13,9 @@ import { generateHeightmap, sampleHeight } from '../game/terrain';
 import { Cruiser, CruiserState, makeCruiserBody } from '../game/cruiser';
 import { Shell, spawnShell } from '../game/shells';
 import { Smoke } from '../game/smoke';
+import { isMobile, tierTuning } from '../lib/device';
+import { useSettings } from '../lib/settings';
+import { TouchControls, RotateHint, useTouchInputState } from '../components/TouchControls';
 
 const BIOME_TUNING: Record<string, { sky: [number, number]; ground: string; mud: number; fog: number }> = {
   ruined_city:        { sky: [0.18, 4],    ground: '#3a3128', mud: 0.0,  fog: 80 },
@@ -29,6 +32,9 @@ export default function Battle() {
   const navigate = useNavigate();
   const { player, session } = useAuth();
   const { sectors, factions } = useWarStore();
+  const tier = useSettings((s) => s.graphicsTier);
+  const tuningGfx = useMemo(() => tierTuning(tier), [tier]);
+  const mobile = useMemo(() => isMobile(), []);
 
   const sector = sectors.find((s) => s.position_index === idx);
   const playerFaction = factions.find((f) => f.id === player?.faction_id);
@@ -42,6 +48,10 @@ export default function Battle() {
   const log = useCallback((line: string) => {
     setHudLog((l) => [...l.slice(-7), line]);
   }, []);
+
+  const touchInput = useTouchInputState();
+  const fireRequested = useRef(false);
+  const requestFire = useCallback(() => { fireRequested.current = true; }, []);
 
   useEffect(() => {
     if (!sector || !player || !playerFaction || battleId) return;
@@ -121,15 +131,15 @@ export default function Battle() {
   }
 
   return (
-    <div className="absolute inset-0 bg-black">
+    <div className="absolute inset-0 bg-black battle-root">
       <Canvas
-        shadows
-        dpr={[1, 1.5]}
-        gl={{ antialias: true, powerPreference: 'high-performance' }}
+        shadows={tuningGfx.shadowMapSize > 0}
+        dpr={[1, tuningGfx.dprMax]}
+        gl={{ antialias: tuningGfx.antialias, powerPreference: 'high-performance' }}
         camera={{ fov: 65, near: 0.1, far: 800 }}
       >
         <color attach="background" args={[biome === 'frozen_north' ? '#b8c8d5' : '#3a3025']} />
-        <fog attach="fog" args={[biome === 'frozen_north' ? '#b8c8d5' : '#5a4a3a', 30, tuning.fog]} />
+        <fog attach="fog" args={[biome === 'frozen_north' ? '#b8c8d5' : '#5a4a3a', 30, tuning.fog * tuningGfx.fogFarMul]} />
         <Sky
           sunPosition={[100, 18, 60]}
           turbidity={tuning.sky[1]}
@@ -142,9 +152,9 @@ export default function Battle() {
           position={[80, 90, 30]}
           intensity={biome === 'frozen_north' ? 1.4 : 1.1}
           color={biome === 'frozen_north' ? '#eef5ff' : '#ffcc8a'}
-          castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          castShadow={tuningGfx.shadowMapSize > 0}
+          shadow-mapSize-width={tuningGfx.shadowMapSize}
+          shadow-mapSize-height={tuningGfx.shadowMapSize}
           shadow-camera-left={-50}
           shadow-camera-right={50}
           shadow-camera-top={50}
@@ -165,13 +175,18 @@ export default function Battle() {
             onWin={() => reportOutcome(true)}
             onLose={() => reportOutcome(false)}
             outcomeLocked={!!outcome}
+            tier={tier}
+            touchInput={touchInput}
+            fireRequestedRef={fireRequested}
           />
         </Suspense>
 
-        <EffectComposer>
-          <Bloom intensity={0.75} luminanceThreshold={0.6} luminanceSmoothing={0.18} mipmapBlur />
-          <Vignette eskil={false} offset={0.2} darkness={0.85} />
-        </EffectComposer>
+        {tuningGfx.bloomEnabled && (
+          <EffectComposer>
+            <Bloom intensity={0.75} luminanceThreshold={0.6} luminanceSmoothing={0.18} mipmapBlur />
+            <Vignette eskil={false} offset={0.2} darkness={0.85} />
+          </EffectComposer>
+        )}
       </Canvas>
 
       <BattleHUD
@@ -184,7 +199,21 @@ export default function Battle() {
         selectedShell={selectedShell}
         setSelectedShell={setSelectedShell}
         log={hudLog}
+        mobile={mobile}
       />
+
+      {mobile && (
+        <TouchControls
+          onFire={requestFire}
+          inventory={shellInventory}
+          selectedShell={selectedShell}
+          setSelectedShell={setSelectedShell}
+          setInput={touchInput.patch}
+          consumeAimDeltas={touchInput.consumeAimDeltas}
+        />
+      )}
+
+      {mobile && <RotateHint />}
 
       {outcome && (
         <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50">
@@ -220,7 +249,7 @@ export default function Battle() {
 
 function BattleScene({
   heightmap, biome, mudFactor, playerFactionSlug, selectedShell, shellInventory, setShellInventory,
-  log, onWin, onLose, outcomeLocked,
+  log, onWin, onLose, outcomeLocked, tier, touchInput, fireRequestedRef,
 }: {
   heightmap: Float32Array;
   biome: string;
@@ -233,6 +262,9 @@ function BattleScene({
   onWin: () => void;
   onLose: () => void;
   outcomeLocked: boolean;
+  tier: 'low' | 'medium' | 'high';
+  touchInput: ReturnType<typeof useTouchInputState>;
+  fireRequestedRef: React.MutableRefObject<boolean>;
 }) {
   const camRef = useRef<THREE.PerspectiveCamera>(null);
 
@@ -283,6 +315,9 @@ function BattleScene({
     w.addBody(enemyBody.current);
   }, []);
 
+  // Keyboard input. Pointer Events are handled in TouchControls.
+  // Desktop keeps WASD/QE/RF/Space; mobile additionally drives the same
+  // input ref through the touch-input ref + fireRequestedRef.
   const input = useRef({
     fwd: 0, turn: 0, turretTurn: 0, turretPitch: 0, fire: false,
   });
@@ -313,14 +348,23 @@ function BattleScene({
 
     world.current?.step(1 / 60, dt, 3);
 
+    // Merge touch input over keyboard input. fwd / turn are absolute on
+    // touch (joystick), so they overwrite keyboard contributions when the
+    // joystick is engaged. Turret yaw/pitch from touch are deltas drained
+    // here and applied below.
+    const touchFwd = touchInput.state.fwd;
+    const touchTurn = touchInput.state.turn;
+    const effFwd  = Math.abs(touchFwd)  > 0.001 ? touchFwd  : input.current.fwd;
+    const effTurn = Math.abs(touchTurn) > 0.001 ? touchTurn : input.current.turn;
+
     if (!playerState.current.immobilized) {
       const accel = 6 * (1 - mudFactor * 0.55);
       const maxSpeed = 9 * (1 - mudFactor * 0.4);
-      playerState.current.speed += input.current.fwd * accel * dt;
+      playerState.current.speed += effFwd * accel * dt;
       playerState.current.speed *= 0.985;
       playerState.current.speed = Math.max(-maxSpeed * 0.5, Math.min(maxSpeed, playerState.current.speed));
       const turnRate = 1.1 * (Math.abs(playerState.current.speed) > 0.5 ? 1 : 0.4);
-      playerState.current.yaw += input.current.turn * turnRate * dt;
+      playerState.current.yaw += effTurn * turnRate * dt;
     } else {
       playerState.current.speed *= 0.85;
     }
@@ -329,11 +373,17 @@ function BattleScene({
     const py = sampleHeight(heightmap, playerState.current.pos.x, playerState.current.pos.z);
     playerState.current.pos.y = py + 0.7;
 
+    // Turret slew: keyboard contribution + drained touch deltas.
     playerState.current.turretYaw += input.current.turretTurn * 1.5 * dt;
     playerState.current.turretPitch += input.current.turretPitch * 0.6 * dt;
+    const aim = touchInput.consumeAimDeltas();
+    playerState.current.turretYaw += aim.yaw;
+    playerState.current.turretPitch += aim.pitch;
     playerState.current.turretPitch = Math.max(-0.05, Math.min(0.45, playerState.current.turretPitch));
 
-    if (input.current.fire && state.clock.elapsedTime - lastFire.current > 1.2 && shellInventory[selectedShell] > 0) {
+    const wantsFire = input.current.fire || fireRequestedRef.current;
+    if (fireRequestedRef.current) fireRequestedRef.current = false;
+    if (wantsFire && state.clock.elapsedTime - lastFire.current > 1.2 && shellInventory[selectedShell] > 0) {
       lastFire.current = state.clock.elapsedTime;
       const origin = playerState.current.pos.clone().add(new THREE.Vector3(0, 0.6, 0));
       const dirYaw = playerState.current.yaw + playerState.current.turretYaw;
@@ -447,7 +497,7 @@ function BattleScene({
     }
   });
 
-  const spawnSmoke = (p: THREE.Vector3, scale: number) => {
+  const spawnSmoke = (p: THREE.Vector3, _scale: number) => {
     setSmokes((arr) => [...arr, { id: nextId.current++, pos: p, t: 0 }]);
   };
 
@@ -490,16 +540,18 @@ function BattleScene({
     applyDamage('penetration', dmg, toPlayer);
   };
 
+  const ruinsCount = tierTuning(tier).ruinsCount;
+
   return (
     <>
       <PerspectiveCamera ref={camRef} makeDefault position={[0, 6, 18]} />
       <Terrain heightmap={heightmap} biome={biome} mud={mudFactor} groundColor={BIOME_TUNING[biome].ground} />
-      <RuinsField biome={biome} count={biome === 'frozen_north' ? 18 : 36} />
+      <RuinsField biome={biome} count={biome === 'frozen_north' ? Math.round(ruinsCount * 0.5) : ruinsCount} />
       <SodiumLamps />
       <Cruiser stateRef={playerState} isPlayer />
       <Cruiser stateRef={enemyState} />
       {shells.map((sh) => (<ShellMesh key={sh.id} shell={sh} />))}
-      {smokes.map((s) => (<Smoke key={s.id} pos={s.pos} t={s.t} />))}
+      {smokes.map((s) => (<Smoke key={s.id} pos={s.pos} t={s.t} tier={tier} />))}
     </>
   );
 }

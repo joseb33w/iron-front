@@ -10,25 +10,27 @@ type Props = {
   selectedShell: 'AP' | 'HE' | 'SMOKE';
   setSelectedShell: (s: 'AP' | 'HE' | 'SMOKE') => void;
   log: string[];
+  mobile?: boolean;
 };
 
 export function BattleHUD({
   sectorIndex, sectorName, biome, factionColor, factionName,
-  inventory, selectedShell, setSelectedShell, log,
+  inventory, selectedShell, setSelectedShell, log, mobile,
 }: Props) {
-  const [showControls, setShowControls] = useState(true);
+  // Field manual help overlay: only on desktop where the keys actually
+  // matter. On mobile the TouchControls overlay is self-explanatory.
+  const [showControls, setShowControls] = useState(!mobile);
 
-  // Show controls panel for first 6 seconds
   useEffect(() => {
+    if (mobile) return;
     const tid = setTimeout(() => setShowControls(false), 6000);
     return () => clearTimeout(tid);
-  }, []);
+  }, [mobile]);
 
   return (
     <div className="absolute inset-0 pointer-events-none z-30 select-none">
-      {/* Top status strip */}
       <div className="absolute top-3 left-3 right-3 flex justify-between items-start gap-3">
-        <div className="panel panel-rivets px-4 py-2 text-xs pointer-events-auto">
+        <div className="panel panel-rivets px-3 sm:px-4 py-2 text-xs pointer-events-auto">
           <div className="stencil text-brass-light text-sm">
             SECTOR {sectorIndex} · {sectorName}
           </div>
@@ -37,27 +39,26 @@ export function BattleHUD({
           </div>
         </div>
 
-        <div className="panel panel-rivets px-4 py-2 text-xs pointer-events-auto" style={{ borderColor: factionColor }}>
+        <div className="panel panel-rivets px-3 sm:px-4 py-2 text-xs pointer-events-auto" style={{ borderColor: factionColor }}>
           <div className="text-[10px] tracking-widest text-steel-300">CALLSIGN</div>
           <div className="stencil text-sm" style={{ color: factionColor }}>HULL-7</div>
         </div>
       </div>
 
-      {/* Brass-rimmed periscope frame (gunner view) */}
       <PeriscopeFrame />
-
-      {/* Range-finder reticle */}
       <RangeReticle />
 
-      {/* Bottom HUD row: ammo wheel + horizon + log */}
-      <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end gap-3">
-        {/* Ammo wheel */}
-        <div className="pointer-events-auto">
-          <AmmoWheel inventory={inventory} selected={selectedShell} setSelected={setSelectedShell} />
-        </div>
+      {/* Bottom HUD row. On mobile the TouchControls take the bottom-left
+          and bottom-right slots, so we hide the desktop ammo wheel + horizon
+          and keep only the combat log in the middle. */}
+      <div className={`absolute bottom-3 left-3 right-3 flex justify-between items-end gap-3 ${mobile ? 'pointer-events-none' : ''}`}>
+        {!mobile && (
+          <div className="pointer-events-auto">
+            <AmmoWheel inventory={inventory} selected={selectedShell} setSelected={setSelectedShell} />
+          </div>
+        )}
 
-        {/* Combat log */}
-        <div className="panel panel-rivets px-3 py-2 max-w-md flex-1 mx-2">
+        <div className={`panel panel-rivets px-3 py-2 max-w-md mx-2 flex-1 pointer-events-auto ${mobile ? 'hidden sm:block' : ''}`}>
           <div className="text-[10px] tracking-widest text-steel-300 mb-1">COMBAT LOG</div>
           {log.length === 0 ? (
             <div className="text-steel-300 text-xs italic">— wait for orders —</div>
@@ -70,12 +71,10 @@ export function BattleHUD({
           )}
         </div>
 
-        {/* Artificial horizon */}
-        <ArtificialHorizon />
+        {!mobile && <ArtificialHorizon />}
       </div>
 
-      {/* Controls help overlay */}
-      {showControls && (
+      {!mobile && showControls && (
         <div className="absolute top-20 right-3 panel panel-rivets p-4 max-w-xs text-xs pointer-events-auto">
           <div className="stencil text-brass-light mb-2">FIELD MANUAL</div>
           <div className="space-y-1 text-steel-100">
@@ -91,7 +90,7 @@ export function BattleHUD({
         </div>
       )}
 
-      <ShellKeybinds setSelected={setSelectedShell} />
+      {!mobile && <ShellKeybinds setSelected={setSelectedShell} />}
     </div>
   );
 }
@@ -108,7 +107,6 @@ function KeyRow({ keys, label }: { keys: string; label: string }) {
 function PeriscopeFrame() {
   return (
     <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1000 700" preserveAspectRatio="none">
-      {/* outer vignette */}
       <defs>
         <radialGradient id="vig" cx="50%" cy="50%" r="60%">
           <stop offset="60%" stopColor="rgba(0,0,0,0)" />
@@ -123,8 +121,6 @@ function PeriscopeFrame() {
       <rect width="1000" height="700" fill="url(#vig)" />
       <ellipse cx="500" cy="350" rx="430" ry="320" fill="none" stroke="url(#rim)" strokeWidth="22" />
       <ellipse cx="500" cy="350" rx="430" ry="320" fill="none" stroke="#7a5b30" strokeWidth="3" opacity="0.6" />
-
-      {/* crack lines (driver's vision slit illusion) */}
       <g opacity="0.18" stroke="#fff" strokeWidth="0.5" fill="none">
         <path d="M 250 200 L 340 240 L 380 220 L 480 280" />
         <path d="M 720 150 L 700 200 L 750 240 L 720 320" />
@@ -139,20 +135,16 @@ function RangeReticle() {
       <g stroke="#d4af6a" fill="none" strokeWidth="1.2" opacity="0.85">
         <circle cx="160" cy="160" r="140" />
         <circle cx="160" cy="160" r="6" />
-        {/* horizontal hash */}
         <line x1="20"  y1="160" x2="80"  y2="160" />
         <line x1="240" y1="160" x2="300" y2="160" />
-        {/* vertical hash */}
         <line x1="160" y1="20"  x2="160" y2="80" />
         <line x1="160" y1="240" x2="160" y2="300" />
-        {/* range ticks (elevation) */}
         {[0,1,2,3,4,5].map(i => (
           <g key={i}>
             <line x1="156" y1={160 + i * 16} x2="164" y2={160 + i * 16} />
             <text x="170" y={163 + i * 16} fontSize="8" fill="#d4af6a" className="stencil">{(i * 500)}</text>
           </g>
         ))}
-        {/* aim chevron */}
         <path d="M 160 152 L 152 168 L 168 168 Z" fill="#d4af6a" />
       </g>
     </svg>
@@ -179,7 +171,7 @@ function AmmoWheel({ inventory, selected, setSelected }: {
             key={t.code}
             onClick={() => setSelected(t.code)}
             disabled={count === 0}
-            className={`relative w-14 h-14 rounded-full border-2 flex items-center justify-center transition-all ${isSel ? 'scale-110' : 'opacity-80 hover:opacity-100'} ${count === 0 ? 'opacity-30' : ''}`}
+            className={`relative w-14 h-14 rounded-full border-2 flex items-center justify-center transition-all ${isSel ? 'scale-110' : 'opacity-80'} ${count === 0 ? 'opacity-30' : ''}`}
             style={{ borderColor: isSel ? t.hot : t.color, background: `radial-gradient(circle, ${t.color}55, ${t.color}11)` }}
           >
             <div className="text-center">
@@ -201,10 +193,8 @@ function ArtificialHorizon() {
         className="absolute inset-2 rounded-full overflow-hidden"
         style={{ background: 'linear-gradient(180deg, #8a5a30 50%, #1a1a17 50%)' }}
       >
-        {/* tilted center line representing pitch */}
         <div className="absolute top-1/2 left-0 right-0 h-px bg-brass-light" />
         <div className="absolute top-1/2 left-4 right-4 h-0.5 bg-brass-light" />
-        {/* "wings" indicator */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-px bg-brass-light/70" />
       </div>
       <div className="absolute bottom-0 left-0 right-0 text-center text-[9px] stencil text-brass-light/80">HOR</div>
