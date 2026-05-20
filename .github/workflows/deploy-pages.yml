@@ -14,6 +14,13 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+env:
+  # Supabase URL + anon (publishable) key are public by design — they get embedded
+  # in any browser bundle. Real security comes from RLS policies in the database.
+  VITE_SUPABASE_URL: https://xhhmxabftbyxrirvvihn.supabase.co
+  VITE_SUPABASE_ANON_KEY: sb_publishable_NZHoIxqqpSvVBP8MrLHCYA_gmg1AbN-
+  VITE_TABLE_PREFIX: usr_nmexs7bytxq2
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,12 +31,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - name: Build
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_TABLE_PREFIX: ${{ secrets.VITE_TABLE_PREFIX }}
-        run: npm run build
+      - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
