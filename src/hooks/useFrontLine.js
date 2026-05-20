@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase, T } from '../lib/supabase';
+import { supabase, T, RPC } from '../lib/supabase';
 
 export function useFrontLine() {
   const [front, setFront] = useState({ position: 0.5, iron_score: 0, steam_score: 0 });
@@ -44,20 +44,25 @@ export function useFrontLine() {
   }, []);
 
   const recordKill = useCallback(async (bunkerX, bunkerZ) => {
-    const { data, error } = await supabase.rpc(`${import.meta.env.VITE_TABLE_PREFIX}_record_kill`, {
-      p_bunker_x: bunkerX,
-      p_bunker_z: bunkerZ,
-    });
+    const { data, error } = await supabase.rpc(RPC.recordKill, { p_bunker_x: bunkerX, p_bunker_z: bunkerZ });
     if (error) return { error: error.message };
     if (data) {
-      setFront({
-        position: data.position,
-        iron_score: data.iron_score,
-        steam_score: data.steam_score,
-      });
+      setFront({ position: data.position, iron_score: data.iron_score, steam_score: data.steam_score });
     }
     return { data };
   }, []);
 
-  return { front, recordKill };
+  const recordAiKill = useCallback(async () => {
+    const { data, error } = await supabase.rpc(RPC.recordAiKill);
+    if (error) return { error: error.message };
+    return { data };
+  }, []);
+
+  const recordDeath = useCallback(async () => {
+    const { data, error } = await supabase.rpc(RPC.recordDeath);
+    if (error) return { error: error.message };
+    return { data };
+  }, []);
+
+  return { front, recordKill, recordAiKill, recordDeath };
 }
