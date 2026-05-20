@@ -33,10 +33,34 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      # Each deploy commits the BUILT index.html (hashed asset refs) to repo root for
+      # GitHub Pages to serve. Before re-building, restore the SOURCE index.html so
+      # Vite uses /src/main.jsx as the entry point — otherwise the next build would
+      # try to bundle the previous build's hashed asset path and produce stale output.
+      - name: Restore source index.html
+        run: |
+          cat > index.html <<'HTML'
+          <!DOCTYPE html>
+          <html lang="en">
+            <head>
+              <meta charset="UTF-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+              <meta name="theme-color" content="#16110a" />
+              <title>Iron Front — Dieselpunk Combat</title>
+              <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%2316110a'/%3E%3Ctext x='32' y='44' font-size='40' text-anchor='middle' fill='%23f5b85a'%3E⚙%3C/text%3E%3C/svg%3E" />
+            </head>
+            <body>
+              <div id="root"></div>
+              <script type="module" src="/src/main.jsx"></script>
+            </body>
+          </html>
+          HTML
+
       - run: npm install --no-audit --no-fund
       - run: npm run build
 
-      # Mirror dist/ also into gh-pages branch (kept for history / source-of-truth)
+      # Mirror dist/ to gh-pages branch (source-of-truth for the built artifacts)
       - uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -47,9 +71,8 @@ jobs:
           user_email: 'github-actions[bot]@users.noreply.github.com'
           commit_message: 'deploy ${{ github.sha }}'
 
-      # Pages serves main/root, so push the built artifacts there too.
-      # Removes the old hashed assets, replaces index.html, and writes .nojekyll
-      # so Jekyll doesn't strip the `assets/` underscore-prefixed files (if any).
+      # Pages serves main/root, so publish the built artifacts there too.
+      # The next workflow run restores the source index.html in the step above.
       - name: Publish built dist to main root
         run: |
           git config user.name 'github-actions[bot]'
