@@ -3,12 +3,14 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'index.html'
+      - 'assets/**'
+      - '.nojekyll'
   workflow_dispatch:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -26,11 +28,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
       - run: npm install --no-audit --no-fund
       - run: npm run build
+
+      # Mirror dist/ also into gh-pages branch (kept for history / source-of-truth)
       - uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -40,15 +46,22 @@ jobs:
           user_name: 'github-actions[bot]'
           user_email: 'github-actions[bot]@users.noreply.github.com'
           commit_message: 'deploy ${{ github.sha }}'
-      - name: Point Pages source at gh-pages
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Pages serves main/root, so push the built artifacts there too.
+      # Removes the old hashed assets, replaces index.html, and writes .nojekyll
+      # so Jekyll doesn't strip the `assets/` underscore-prefixed files (if any).
+      - name: Publish built dist to main root
         run: |
-          set +e
-          gh api -X PUT "/repos/${{ github.repository }}/pages" \
-            -f 'source[branch]=gh-pages' \
-            -f 'source[path]=/' && echo "Pages source updated" && exit 0
-          # if PUT failed because Pages isn't enabled yet, try POST instead
-          gh api -X POST "/repos/${{ github.repository }}/pages" \
-            -f 'source[branch]=gh-pages' \
-            -f 'source[path]=/' && echo "Pages enabled" || echo "Pages config unchanged (already pointing at gh-pages or other error)"
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          rm -rf assets
+          cp -r dist/assets ./assets
+          cp dist/index.html ./index.html
+          touch .nojekyll
+          git add -A index.html assets .nojekyll
+          if git diff --staged --quiet; then
+            echo "no built changes to publish"
+          else
+            git commit -m "deploy: built artifacts for ${{ github.sha }} [skip ci]"
+            git push origin HEAD:main
+          fi
