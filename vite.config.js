@@ -1,13 +1,1 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
-export default defineConfig({
-  plugins: [react()],
-  base: './',
-  build: {
-    outDir: 'dist',
-    sourcemap: false,
-    target: 'es2020',
-    chunkSizeWarningLimit: 1500,
-  },
-});
+aW1wb3J0IHsgZGVmaW5lQ29uZmlnIH0gZnJvbSAndml0ZSc7CgpleHBvcnQgZGVmYXVsdCBkZWZpbmVDb25maWcoewogIGJhc2U6ICcuLycsCiAgYnVpbGQ6IHsKICAgIG91dERpcjogJ2Rpc3QnLAogICAgc291cmNlbWFwOiBmYWxzZSwKICAgIHRhcmdldDogJ2VzMjAyMCcsCiAgICBjaHVua1NpemVXYXJuaW5nTGltaXQ6IDEyMDAsCiAgfSwKfSk7Cg==
