@@ -22,6 +22,7 @@ export default function App() {
   const [hp, setHp] = useState(PLAYER_MAX_HP);
   const [alive, setAlive] = useState(true);
   const [respawnIn, setRespawnIn] = useState(0);
+  const [reloading, setReloading] = useState(false);
   const respawnTimerRef = useRef(null);
   const invulUntilRef = useRef(0);
   const poseRef = useRef({ x: 0, z: 0, heading: 0, hp: PLAYER_MAX_HP });
@@ -146,6 +147,7 @@ export default function App() {
         hp={hp}
         scrap={player.scrap}
         onPoseUpdate={handlePoseUpdate}
+        onReloadChange={setReloading}
       />
       <Hud
         player={player}
@@ -155,6 +157,7 @@ export default function App() {
         hp={hp}
         alive={alive}
         respawnIn={respawnIn}
+        reloading={reloading}
         remotePlayers={remotePlayers}
         leaderboard={leaderboard}
         onSignOut={handleSignOut}

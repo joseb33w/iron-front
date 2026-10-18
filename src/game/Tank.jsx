@@ -25,6 +25,7 @@ export default function Tank({ faction = 'iron', hp = 100, maxHp = 100, equipped
   const hpPct = Math.max(0, Math.min(1, hp / maxHp));
   const isDual = equippedWeapon === 'wpn_dual';
   const isMissile = equippedWeapon === 'wpn_missile';
+  const isMortar = equippedWeapon === 'wpn_mortar';
 
   return (
     <group>
@@ -95,7 +96,9 @@ export default function Tank({ faction = 'iron', hp = 100, maxHp = 100, equipped
           <boxGeometry args={[0.55, 0.55, 0.85]} />
           <meshStandardMaterial color={palette.armor} roughness={0.55} metalness={0.85} />
         </mesh>
-        {isDual ? (
+        {isMortar ? (
+          <MortarTube palette={palette} />
+        ) : isDual ? (
           <>
             <Barrel offsetZ={-0.32} palette={palette} length={2.8} />
             <Barrel offsetZ={0.32} palette={palette} length={2.8} />
@@ -152,6 +155,31 @@ function Barrel({ offsetZ = 0, palette, length = 2.8, thick = false }) {
       <mesh position={[length + 0.55, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
         <cylinderGeometry args={[r * 1.55, r * 1.55, 0.4, 12]} />
         <meshStandardMaterial color={palette.trim} roughness={0.3} metalness={0.95} emissive={palette.trim} emissiveIntensity={0.18} />
+      </mesh>
+    </group>
+  );
+}
+
+function MortarTube({ palette }) {
+  return (
+    <group position={[0.3, 0.15, 0]} rotation={[0, 0, 0.62]}>
+      <mesh position={[0.9, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[0.36, 0.42, 1.9, 14]} />
+        <meshStandardMaterial color={palette.armor} roughness={0.45} metalness={0.85} />
+      </mesh>
+      <mesh position={[1.85, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[0.48, 0.4, 0.3, 14]} />
+        <meshStandardMaterial color={palette.trim} roughness={0.3} metalness={0.95} emissive={palette.trim} emissiveIntensity={0.18} />
+      </mesh>
+      {[0.5, 1.1].map((x) => (
+        <mesh key={x} position={[x, 0, 0]} rotation={[0, Math.PI / 2, 0]}>
+          <torusGeometry args={[0.42, 0.05, 8, 16]} />
+          <meshStandardMaterial color={palette.detail} roughness={0.4} metalness={0.9} />
+        </mesh>
+      ))}
+      <mesh position={[0.15, -0.35, 0]} castShadow>
+        <boxGeometry args={[0.5, 0.5, 0.9]} />
+        <meshStandardMaterial color={palette.armor} roughness={0.7} metalness={0.6} />
       </mesh>
     </group>
   );

@@ -44,7 +44,7 @@ function Joystick({ onMove }) {
   );
 }
 
-export default function Hud({ player, front, world, effects, hp, alive, respawnIn, remotePlayers, onSignOut, leaderboard, onOpenStore, onOpenWorld }) {
+export default function Hud({ player, front, world, effects, hp, alive, respawnIn, reloading, remotePlayers, onSignOut, leaderboard, onOpenStore, onOpenWorld }) {
   const handleMove = (forward, turn) => {
     if (window.__ironMobile) window.__ironMobile.setMove(forward, turn);
   };
@@ -57,6 +57,8 @@ export default function Hud({ player, front, world, effects, hp, alive, respawnI
   const factionClass = player.faction;
   const factionEmblem = player.faction === 'iron' ? '⚙' : '✦';
   const hpPct = Math.max(0, Math.min(1, hp / PLAYER_MAX_HP));
+  const mortar = effects.weaponMode === 'mortar';
+  const fireLabel = mortar ? (reloading ? 'Loading' : 'Mortar') : 'Fire';
 
   return (
     <div className="hud">
@@ -142,16 +144,18 @@ export default function Hud({ player, front, world, effects, hp, alive, respawnI
       <div className="touch-controls">
         <Joystick onMove={handleMove} />
         <button
-          className="fire-btn"
+          className={`fire-btn ${mortar ? 'mortar' : ''} ${mortar && reloading ? 'reloading' : ''}`}
           onTouchStart={(e) => { e.preventDefault(); handleFire(); }}
           onMouseDown={(e) => { e.preventDefault(); handleFire(); }}
           aria-label="Fire"
+          data-testid="fire-btn"
+          data-reloading={mortar && reloading ? '1' : '0'}
         >
-          Fire
+          {fireLabel}
         </button>
       </div>
 
-      <div className="help">WASD to drive · Space to fire · {remotePlayers.length} other commander{remotePlayers.length === 1 ? '' : 's'} on this front</div>
+      <div className="help">WASD to drive · Space to {mortar ? 'lob a mortar round' : 'fire'} · {remotePlayers.length} other commander{remotePlayers.length === 1 ? '' : 's'} on this front</div>
     </div>
   );
 }
