@@ -2,7 +2,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 
 // Cosmetic explosion: expanding glow sphere + outward shards. Lives ~0.6s.
-export default function Explosion({ x, y = 1, z, color = '#ffb858', startedAt }) {
+export default function Explosion({ x, y = 1, z, color = '#ffb858', size = 1, startedAt }) {
   const ref = useRef();
   const shardRefs = useRef([]);
   shardRefs.current = [];
@@ -25,16 +25,16 @@ export default function Explosion({ x, y = 1, z, color = '#ffb858', startedAt })
     const t = (state.clock.elapsedTime - startedAt);
     const f = Math.max(0, Math.min(1, t / 0.6));
     if (ref.current) {
-      const s = 0.4 + f * 4;
+      const s = (0.4 + f * 4) * size;
       ref.current.scale.set(s, s, s);
       if (ref.current.material) ref.current.material.opacity = (1 - f) * 0.85;
     }
     shardRefs.current.forEach((m, i) => {
       const seed = seeds[i];
       if (!m || !seed) return;
-      const dist = f * 4;
+      const dist = f * 4 * size;
       m.position.set(x + seed.dx * dist, y + seed.dy * (1 - f * 0.5) * 2, z + seed.dz * dist);
-      m.scale.setScalar(seed.scale * (1 - f * 0.6));
+      m.scale.setScalar(seed.scale * size * (1 - f * 0.6));
       if (m.material) m.material.opacity = 1 - f;
     });
   });

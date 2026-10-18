@@ -33,6 +33,16 @@ export const STORE_ITEMS = [
     effects: { explosionRadius: 6, fireCooldown: 0.55 * 1.4, shellDamageRadius: 6 },
   },
   {
+    id: 'wpn_mortar',
+    name: 'Siege Mortar',
+    description: 'Lobs a heavy round over the field. Detonates on impact and splashes every bunker and tank near the crater. Slow reload.',
+    cost: 50,
+    kind: 'weapon',
+    emblem: '✸',
+    color: '#ffa33d',
+    effects: { weaponMode: 'mortar' },
+  },
+  {
     id: 'pwr_armor',
     name: 'Reinforced Armor',
     description: 'Take 50% less damage from enemy fire.',
@@ -98,6 +108,7 @@ export function combineEffects(equippedIds = []) {
     turnMul: 1,
     autoRepair: 0,
     radar: false,
+    weaponMode: 'cannon',
   };
   for (const id of equippedIds) {
     const item = ITEM_BY_ID[id];

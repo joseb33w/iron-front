@@ -19,6 +19,17 @@ export const FIRE_COOLDOWN = 0.55;
 export const BUNKER_RADIUS = 3.4;
 export const BUNKER_RESPAWN = 2.5;
 
+export const MORTAR_COOLDOWN = 1.6;
+export const MORTAR_LAUNCH_SPEED = 34;
+export const MORTAR_LAUNCH_LIFT = 17;
+export const MORTAR_GRAVITY = 20;
+export const MORTAR_LIFETIME = 4.0;
+export const MORTAR_MUZZLE_Y = 2.1;
+export const MORTAR_IMPACT_Y = 0.3;
+export const MORTAR_SPLASH = 7;
+export const MORTAR_DAMAGE = 45;
+export const MORTAR_DIRECT_HIT_Y = 2.4;
+
 export const PLAYER_MAX_HP = 120;
 export const AI_MAX_HP = 60;
 export const AI_FIRE_COOLDOWN = 2.2;
