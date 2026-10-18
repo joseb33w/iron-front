@@ -14,6 +14,15 @@ import {
   AI_SHELL_RADIUS,
   BUNKER_RADIUS,
   BUNKER_RESPAWN,
+  MORTAR_COOLDOWN,
+  MORTAR_DAMAGE,
+  MORTAR_DIRECT_HIT_Y,
+  MORTAR_GRAVITY,
+  MORTAR_IMPACT_Y,
+  MORTAR_LAUNCH_LIFT,
+  MORTAR_LIFETIME,
+  MORTAR_MUZZLE_Y,
+  MORTAR_SPLASH,
   PLAYER_MAX_HP,
   PLAYER_SHELL_DAMAGE,
   SHELL_LIFETIME,
@@ -25,6 +34,7 @@ import {
   forwardVec,
   generateAiTanks,
   generateBunkerRow,
+  mortarAim,
   spawnHeading,
   spawnZForPlayer,
 } from './gameState';
@@ -124,6 +134,33 @@ function WorldSun({ world }) {
   );
 }
 
+function MortarRound({ shell }) {
+  const speed = Math.hypot(shell.vx, shell.vy, shell.vz) || 1;
+  const dx = shell.vx / speed;
+  const dy = shell.vy / speed;
+  const dz = shell.vz / speed;
+  const pitch = Math.asin(Math.max(-1, Math.min(1, dy)));
+  const yaw = Math.atan2(-dz, dx);
+  return (
+    <group position={[shell.x, shell.y, shell.z]} rotation={[0, yaw, pitch]}>
+      <mesh rotation={[0, 0, -Math.PI / 2]}>
+        <capsuleGeometry args={[0.3, 0.7, 4, 10]} />
+        <meshStandardMaterial color="#3a2818" roughness={0.6} metalness={0.8} />
+      </mesh>
+      <mesh position={[0.55, 0, 0]}>
+        <sphereGeometry args={[0.2, 8, 8]} />
+        <meshStandardMaterial color="#fff2c0" emissive="#ffa33d" emissiveIntensity={3.5} />
+      </mesh>
+      {[0.9, 1.5, 2.1].map((d, i) => (
+        <mesh key={i} position={[-d, 0, 0]}>
+          <sphereGeometry args={[0.26 - i * 0.05, 8, 8]} />
+          <meshBasicMaterial color="#d9c6a8" transparent opacity={0.45 - i * 0.12} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 function Scene({
   player,
   front,
@@ -137,6 +174,7 @@ function Scene({
   mobileInputRef,
   onDebug,
   onShellCount,
+  onReloadChange,
   remotePlayers,
   alive,
 }) {
@@ -148,9 +186,12 @@ function Scene({
   const aiShellsRef = useRef(aiShells); aiShellsRef.current = aiShells;
 
   const cooldownRef = useRef(0);
-  const fireCooldown = effects.fireCooldown;
+  const reloadingRef = useRef(false);
+  const isMortar = effects.weaponMode === 'mortar';
+  const fireCooldown = isMortar ? MORTAR_COOLDOWN : effects.fireCooldown;
   const shellsPerShot = effects.shellsPerShot;
-  const shellRadius = effects.shellDamageRadius;
+  const shellRadius = isMortar ? Math.max(MORTAR_SPLASH, effects.shellDamageRadius) : effects.shellDamageRadius;
+  const equippedWeapon = isMortar ? 'wpn_mortar' : shellsPerShot > 1 ? 'wpn_dual' : shellRadius > 0 ? 'wpn_missile' : null;
   const damageOutMul = effects.damageOutMul;
   const damageInMul = effects.damageMul;
   const speedMul = effects.speedMul;
@@ -242,36 +283,120 @@ function Scene({
       m.fireEdge = false;
       cooldownRef.current = fireCooldown;
       const fwd = forwardVec(tank.rotation.y);
-      const px = -fwd.z;
-      const pz = fwd.x;
+      const aim = isMortar
+        ? mortarAim(tank.position, fwd, [...bunkersNow.filter((b) => b.alive), ...aiTanksNow.filter((a) => a.alive)])
+        : null;
+      const dir = aim ? aim.dir : fwd;
+      const px = -dir.z;
+      const pz = dir.x;
       for (let k = 0; k < shellsPerShot; k++) {
-        const offset = shellsPerShot === 1 ? 0 : (k - (shellsPerShot - 1) / 2) * 0.6;
-        shellPool.push({
-          id: Math.random().toString(36).slice(2),
-          x: tank.position.x + fwd.x * 3 + px * offset,
-          y: 1.25,
-          z: tank.position.z + fwd.z * 3 + pz * offset,
-          vx: fwd.x * SHELL_SPEED,
-          vz: fwd.z * SHELL_SPEED,
-          t: 0,
-        });
+        const offset = shellsPerShot === 1 ? 0 : (k - (shellsPerShot - 1) / 2) * (isMortar ? 2.5 : 0.6);
+        if (isMortar) {
+          shellPool.push({
+            id: Math.random().toString(36).slice(2),
+            kind: 'mortar',
+            x: tank.position.x + px * offset,
+            y: MORTAR_MUZZLE_Y,
+            z: tank.position.z + pz * offset,
+            vx: dir.x * aim.speed,
+            vy: MORTAR_LAUNCH_LIFT,
+            vz: dir.z * aim.speed,
+            t: 0,
+          });
+        } else {
+          shellPool.push({
+            id: Math.random().toString(36).slice(2),
+            kind: 'cannon',
+            x: tank.position.x + fwd.x * 3 + px * offset,
+            y: 1.25,
+            z: tank.position.z + fwd.z * 3 + pz * offset,
+            vx: fwd.x * SHELL_SPEED,
+            vz: fwd.z * SHELL_SPEED,
+            t: 0,
+          });
+        }
       }
       shellsFiredRef.current += shellsPerShot;
-      onDebug?.({ shellsFired: shellsFiredRef.current });
+      onDebug?.({ shellsFired: shellsFiredRef.current, mortarLocked: aim ? aim.locked : false });
     } else {
       i.fireEdge = false;
       m.fireEdge = false;
+    }
+
+    const reloading = cooldownRef.current > 0;
+    if (reloading !== reloadingRef.current) {
+      reloadingRef.current = reloading;
+      onReloadChange?.(reloading);
     }
 
     const stepMax = 0.6 / SHELL_SPEED;
     const N = Math.max(1, Math.ceil(dt / stepMax));
     const sub = dt / N;
 
+    const detonateMortar = (sx, sy, sz) => {
+      newExplosions.push({ id: Math.random().toString(36).slice(2), x: sx, y: Math.max(0.8, sy), z: sz, color: '#ffa33d', size: 1.9, startedAt: now });
+      const bunkerReach = BUNKER_RADIUS + shellRadius;
+      for (let bi = 0; bi < bunkersNow.length; bi++) {
+        const b = bunkersNow[bi];
+        if (!b.alive || bunkerHits.includes(bi)) continue;
+        const dx = sx - b.x, dz = sz - b.z;
+        if (dx * dx + dz * dz <= bunkerReach * bunkerReach) bunkerHits.push(bi);
+      }
+      const tankReach = 2.2 + shellRadius;
+      for (let ai = 0; ai < aiTanksNow.length; ai++) {
+        const a = aiTanksNow[ai];
+        if (!a.alive) continue;
+        const d = Math.hypot(sx - a.x, sz - a.z);
+        if (d > tankReach) continue;
+        const falloff = d <= 3 ? 1 : 1 - ((d - 3) / (tankReach - 3)) * 0.5;
+        aiHits.push([ai, MORTAR_DAMAGE * falloff * damageOutMul]);
+      }
+    };
+
     for (const s of shellPool) {
       let hit = false;
       let t = s.t;
       let sx = s.x;
       let sz = s.z;
+      if (s.kind === 'mortar') {
+        let sy = s.y;
+        let vy = s.vy;
+        for (let n = 0; n < N && !hit; n++) {
+          t += sub;
+          if (t >= MORTAR_LIFETIME) { hit = true; break; }
+          sx += s.vx * sub;
+          sz += s.vz * sub;
+          vy -= MORTAR_GRAVITY * sub;
+          sy += vy * sub;
+          if (sy <= MORTAR_IMPACT_Y) {
+            detonateMortar(sx, MORTAR_IMPACT_Y, sz);
+            hit = true;
+            break;
+          }
+          if (vy < 0 && sy <= MORTAR_DIRECT_HIT_Y) {
+            for (let bi = 0; bi < bunkersNow.length && !hit; bi++) {
+              const b = bunkersNow[bi];
+              if (!b.alive) continue;
+              const dx = sx - b.x, dz = sz - b.z;
+              if (dx * dx + dz * dz <= BUNKER_RADIUS * BUNKER_RADIUS) {
+                detonateMortar(sx, sy, sz);
+                hit = true;
+              }
+            }
+            for (let ai = 0; ai < aiTanksNow.length && !hit; ai++) {
+              const a = aiTanksNow[ai];
+              if (!a.alive) continue;
+              const dx = sx - a.x, dz = sz - a.z;
+              if (dx * dx + dz * dz <= 2.2 * 2.2) {
+                detonateMortar(sx, sy, sz);
+                hit = true;
+              }
+            }
+          }
+        }
+        if (!hit) survivingPlayerShells.push({ ...s, t, x: sx, y: sy, z: sz, vy });
+        continue;
+      }
       for (let n = 0; n < N && !hit; n++) {
         t += sub;
         if (t >= SHELL_LIFETIME) { hit = true; break; }
@@ -317,7 +442,7 @@ function Scene({
     }
     shellsRef.current = survivingPlayerShells;
     setShells(survivingPlayerShells);
-    onShellCount?.(survivingPlayerShells.length);
+    onShellCount?.(survivingPlayerShells.length, survivingPlayerShells.reduce((m, sh) => Math.max(m, sh.y), 0));
 
     if (aiHits.length > 0) {
       aiHitsRef.current += aiHits.length;
@@ -471,10 +596,14 @@ function Scene({
       ))}
 
       {shells.map((s) => (
-        <mesh key={s.id} position={[s.x, s.y, s.z]}>
-          <sphereGeometry args={[0.22, 10, 10]} />
-          <meshStandardMaterial color="#fff7c2" emissive="#ffb858" emissiveIntensity={3.2} />
-        </mesh>
+        s.kind === 'mortar' ? (
+          <MortarRound key={s.id} shell={s} />
+        ) : (
+          <mesh key={s.id} position={[s.x, s.y, s.z]}>
+            <sphereGeometry args={[0.22, 10, 10]} />
+            <meshStandardMaterial color="#fff7c2" emissive="#ffb858" emissiveIntensity={3.2} />
+          </mesh>
+        )
       ))}
 
       {aiShells.map((s) => (
@@ -485,11 +614,11 @@ function Scene({
       ))}
 
       {explosions.map((e) => (
-        <Explosion key={e.id} x={e.x} y={e.y} z={e.z} color={e.color} startedAt={e.startedAt} />
+        <Explosion key={e.id} x={e.x} y={e.y} z={e.z} color={e.color} size={e.size} startedAt={e.startedAt} />
       ))}
 
       <group ref={tankGroupRef}>
-        {alive && <Tank faction={player.faction} hp={100} maxHp={PLAYER_MAX_HP} treadPhase={treadPhaseRef.current} />}
+        {alive && <Tank faction={player.faction} hp={100} maxHp={PLAYER_MAX_HP} equippedWeapon={equippedWeapon} treadPhase={treadPhaseRef.current} />}
       </group>
 
       <ChaseCamera targetRef={tankGroupRef} />
@@ -510,12 +639,14 @@ export default function Game({
   hp,
   scrap,
   onPoseUpdate,
+  onReloadChange,
 }) {
   const inputRef = useInput();
   const mobileInputRef = useRef({ forward: 0, turn: 0, fireEdge: false });
   const [debug, setDebug] = useState({ shellsFired: 0, killCount: 0 });
   const [pose, setPose] = useState({ x: 0, z: 0, heading: 0 });
   const [shellCount, setShellCount] = useState(0);
+  const [shellPeakY, setShellPeakY] = useState(0);
 
   useEffect(() => {
     window.__ironMobile = {
@@ -533,7 +664,7 @@ export default function Game({
 
   const handleDebug = (patch) => setDebug((d) => ({ ...d, ...patch }));
   const handlePose = (p) => { setPose(p); onPoseUpdate?.(p); };
-  const handleShellCount = (n) => setShellCount(n);
+  const handleShellCount = (n, peakY) => { setShellCount(n); setShellPeakY(peakY); };
 
   return (
     <div className="game-root" data-testid="game-root">
@@ -558,6 +689,7 @@ export default function Game({
           onPlayerStateChange={handlePose}
           onDebug={handleDebug}
           onShellCount={handleShellCount}
+          onReloadChange={onReloadChange}
           remotePlayers={remotePlayers}
           alive={alive}
         />
@@ -574,6 +706,8 @@ export default function Game({
       <input type="hidden" data-testid="bunker-hits" value={debug.bunkerHits || 0} readOnly />
       <input type="hidden" data-testid="ai-hits" value={debug.aiHits || 0} readOnly />
       <input type="hidden" data-testid="shell-count" value={shellCount} readOnly />
+      <input type="hidden" data-testid="shell-peak-y" value={shellPeakY.toFixed(2)} readOnly />
+      <input type="hidden" data-testid="mortar-locked" value={debug.mortarLocked ? '1' : '0'} readOnly />
       <input type="hidden" data-testid="player-hp" value={hp} readOnly />
       <input type="hidden" data-testid="player-scrap" value={scrap} readOnly />
       <input type="hidden" data-testid="player-alive" value={alive ? '1' : '0'} readOnly />

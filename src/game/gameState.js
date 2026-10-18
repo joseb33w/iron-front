@@ -20,15 +20,36 @@ export const BUNKER_RADIUS = 3.4;
 export const BUNKER_RESPAWN = 2.5;
 
 export const MORTAR_COOLDOWN = 1.6;
-export const MORTAR_LAUNCH_SPEED = 34;
-export const MORTAR_LAUNCH_LIFT = 17;
-export const MORTAR_GRAVITY = 20;
+export const MORTAR_LAUNCH_LIFT = 13;
+export const MORTAR_GRAVITY = 22;
 export const MORTAR_LIFETIME = 4.0;
 export const MORTAR_MUZZLE_Y = 2.1;
 export const MORTAR_IMPACT_Y = 0.3;
+export const MORTAR_MIN_RANGE = 8;
+export const MORTAR_MAX_RANGE = 60;
+export const MORTAR_AIM_CONE_COS = Math.cos(Math.PI / 6);
 export const MORTAR_SPLASH = 7;
 export const MORTAR_DAMAGE = 45;
 export const MORTAR_DIRECT_HIT_Y = 2.4;
+// Time for a round to fall from the muzzle back to impact height on flat ground.
+export const MORTAR_FLIGHT_TIME =
+  (MORTAR_LAUNCH_LIFT + Math.sqrt(MORTAR_LAUNCH_LIFT * MORTAR_LAUNCH_LIFT + 2 * MORTAR_GRAVITY * (MORTAR_MUZZLE_Y - MORTAR_IMPACT_Y))) / MORTAR_GRAVITY;
+
+export function mortarAim(origin, fwd, targets) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const t of targets) {
+    const dx = t.x - origin.x;
+    const dz = t.z - origin.z;
+    const d = Math.hypot(dx, dz);
+    if (d < MORTAR_MIN_RANGE || d > MORTAR_MAX_RANGE || d >= bestDist) continue;
+    if ((dx * fwd.x + dz * fwd.z) / d < MORTAR_AIM_CONE_COS) continue;
+    best = { x: dx / d, z: dz / d };
+    bestDist = d;
+  }
+  if (!best) return { dir: fwd, speed: MORTAR_MAX_RANGE / MORTAR_FLIGHT_TIME, locked: false };
+  return { dir: best, speed: bestDist / MORTAR_FLIGHT_TIME, locked: true };
+}
 
 export const PLAYER_MAX_HP = 120;
 export const AI_MAX_HP = 60;

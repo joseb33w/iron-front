@@ -15,6 +15,15 @@ Enlist with one of two factions — the **Iron Order** (brass and oil, north) or
 - **Space** — fire main gun
 - **Touch** — joystick (left) to drive, fire button (right)
 
+## Weapons
+
+Weapons are bought once with scrap at the **Quartermaster** (the Store button) and then equipped — up to three items at a time. Space / the fire button always fires whatever is equipped.
+
+- **Rapid Cannon** — halved cooldown between shots.
+- **Dual Cannons** — two parallel shells per shot.
+- **Missile Launcher** — slower reload, splash damage on tanks.
+- **Siege Mortar** — indirect fire. Point roughly at the enemy and fire: the tube auto-ranges onto the nearest bunker or tank within 60 m in a 30° cone ahead of you and lobs a heavy round onto it (no target in the cone → a max-range lob straight ahead). It detonates on impact and splashes every bunker and enemy tank near the crater. Slow reload — the fire button reads *Loading* until the tube is ready.
+
 ## Tech
 
 - **Frontend** — Vite + React 18, R3F + drei for the 3D scene, vanilla CSS for the HUD.

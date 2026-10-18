@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, T, RPC } from '../lib/supabase';
 import { MAX_EQUIPPED } from '../game/store';
 
@@ -9,15 +9,17 @@ export function usePlayer(session) {
   const [error, setError] = useState(null);
 
   const userId = session?.user?.id ?? null;
+  const loadedForRef = useRef(null);
 
   const refresh = useCallback(async () => {
     if (!userId) {
       setPlayer(null);
       setInventory([]);
       setLoading(false);
+      loadedForRef.current = null;
       return;
     }
-    setLoading(true);
+    if (loadedForRef.current !== userId) setLoading(true);
     const [pRes, iRes] = await Promise.all([
       supabase.from(T.players).select('*').eq('user_id', userId).maybeSingle(),
       supabase.from(T.inventory).select('item_id, qty').eq('user_id', userId),
@@ -29,6 +31,7 @@ export function usePlayer(session) {
     }
     setPlayer(pRes.data);
     setInventory(iRes.data || []);
+    loadedForRef.current = userId;
     setLoading(false);
   }, [userId]);
 
